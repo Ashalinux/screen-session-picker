@@ -1,0 +1,42 @@
+#!/bin/bash
+
+get_screens() {
+    ls /var/run/screen/S-root/ | grep . | awk -F. '{print $1" "$2}'
+}
+
+while :; do
+    IFS=$'\n' read -r -d '' -a screens < <(get_screens && printf '\0')
+    if [ ${#screens[@]} -eq 0 ]; then
+        dialog --infobox "No available screens found.\n\nPress [CTRL]+[C] to cancel" 0 0
+        sleep 5
+        continue
+    fi
+
+    declare -A screen_map
+    menu_options=()
+    number=0
+
+    sorted_screens=$(for screen in "${screens[@]}"; do
+        pid=$(echo "$screen" | awk '{print $1}')
+        session_name=$(echo "$screen" | awk '{print $2}')
+        echo "$pid $session_name"
+    done | sort -n)
+
+    while IFS= read -r line; do
+        pid=$(echo "$line" | awk '{print $1}')
+        session_name=$(echo "$line" | awk '{print $2}')
+        index=$(printf "%02d" "$number")
+        menu_options+=("$index" " $pid $session_name ")
+        screen_map["$index"]="$pid"
+        ((number++))
+    done <<< "$sorted_screens"
+
+    choice=$(dialog --no-cancel --menu "Select a screen session:" 0 0 0 "${menu_options[@]}" 3>&2 2>&1 1>&3)
+
+    if [[ -n "${screen_map[$choice]}" ]]; then
+        clear
+        screen -x "${screen_map[$choice]}"
+    else
+        dialog --msgbox "Invalid selection. Please try again." 0 0
+    fi
+done
